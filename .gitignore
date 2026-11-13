@@ -9,3 +9,7 @@ target/
 .DS_Store
 __pycache__/
 *.py[cod]
+
+# Personal workspace (do not commit to git)
+my_workspace/
+
