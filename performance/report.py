@@ -28,8 +28,8 @@ def read_phase(run_dir, phase, config):
 
     requests = int(number("Request Count"))
     failures = int(number("Failure Count"))
-    if requests <= 0 or failures < 0 or failures > requests:
-        raise ValueError(f"Invalid or empty request counts in {csv_path}")
+    if requests < 0 or failures < 0:
+        raise ValueError(f"Invalid request counts in {csv_path}")
     return {
         "phase": phase,
         "users": config["users"],
@@ -48,7 +48,7 @@ def read_phase(run_dir, phase, config):
 def build_report(run_dir):
     metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
     results = [read_phase(run_dir, phase, metadata["phases"][phase])
-               for phase in PHASES if phase in metadata["phases"]]
+               for phase in metadata["phases"]]
     if any(row is None for row in results):
         raise ValueError("Metadata contains a phase without its Locust CSV")
     if not results:

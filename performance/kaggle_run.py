@@ -27,9 +27,16 @@ WORKING = Path("/kaggle/working")
 HOST = "http://127.0.0.1:18080"
 PHASES = (
     ("smoke", 5, 60),
-    ("baseline", 10, 120),
-    ("main", 30, 300),
-    ("high", 60, 300),
+    ("baseline", 10, 60),
+    ("main", 30, 90),
+    ("high", 60, 90),
+    ("stress_100", 100, 90),
+    ("stress_150", 150, 90),
+    ("stress_200", 200, 90),
+    ("stress_250", 250, 90),
+    ("stress_300", 300, 90),
+    ("stress_400", 400, 90),
+    ("stress_500", 500, 90),
 )
 
 
@@ -150,9 +157,9 @@ def api_post(path, body, expected=200, token=None):
                            f"{error.read(300).decode('utf-8', errors='replace')}") from error
 
 
-def prepare_fixtures(users, admin_token, public_product_ids):
-    fixtures = []
-    for _ in range(users):
+def prepare_fixtures(target_count, pool, admin_token, public_product_ids):
+    needed = target_count - len(pool)
+    for _ in range(needed):
         suffix = uuid.uuid4().hex[:16]
         email = f"load-{suffix}@example.com"
         password = "LoadCustomer@123"
@@ -167,12 +174,12 @@ def prepare_fixtures(users, admin_token, public_product_ids):
             "description": "Chỉ dùng trong DB kiểm thử tải",
             "price": 1000, "stockQuantity": 100000,
         }, expected=201, token=admin_token)
-        fixtures.append({"email": email, "password": password, "token": token,
-                         "product_id": product["id"], "public_product_ids": public_product_ids})
-    return fixtures
+        pool.append({"email": email, "password": password, "token": token,
+                     "product_id": product["id"], "public_product_ids": public_product_ids})
+    return pool[:target_count]
 
 
-def run_phases(run_dir, metadata, admin_email, admin_password):
+def run_phases(run_dir, metadata, admin_email, admin_password, api_process):
     admin_token = api_post("/api/auth/login", {
         "email": admin_email, "password": admin_password,
     })["accessToken"]
@@ -181,16 +188,27 @@ def run_phases(run_dir, metadata, admin_email, admin_password):
     if not public_product_ids:
         raise RuntimeError("No products available for detail GET task")
     only_smoke = os.environ.get("LOAD_SMOKE_ONLY") == "1"
+    fixture_pool = []
     for phase, users, seconds in PHASES:
         if only_smoke and phase != "smoke":
             break
-        fixtures = prepare_fixtures(users, admin_token, public_product_ids)
+        if api_process.poll() is not None:
+            metadata["stopped_reason"] = f"API process crashed before phase {phase}"
+            (run_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+            break
+        try:
+            fixtures = prepare_fixtures(users, fixture_pool, admin_token, public_product_ids)
+        except Exception as exc:
+            metadata["stopped_reason"] = f"Failed to prepare fixtures for {phase} ({users} users): {exc}"
+            (run_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+            break
         prefix = run_dir / phase
+        spawn_rate = max(5, users // 10)
         command = [sys.executable, "-m", "locust", "-f", str(REPO / "performance/locustfile.py"),
-                   "--headless", "--host", HOST, "-u", str(users), "-r", "5",
+                   "--headless", "--host", HOST, "-u", str(users), "-r", str(spawn_rate),
                    "-t", f"{seconds}s", "--csv", str(prefix), "--csv-full-history",
                    "--html", str(run_dir / f"{phase}_report.html")]
-        print(f"Starting {phase}: {users} users for {seconds}s", flush=True)
+        print(f"Starting {phase}: {users} users for {seconds}s (spawn {spawn_rate}/s)", flush=True)
         fixture_path = None
         try:
             with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".json",
@@ -207,14 +225,14 @@ def run_phases(run_dir, metadata, admin_email, admin_password):
         metadata["phases"][phase] = {
             "users": users, "duration_seconds": seconds, "exit_code": finished.returncode}
         (run_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-        build_report(run_dir)
-        if finished.returncode:
-            raise RuntimeError(f"Locust {phase} failed; inspect {phase}_locust.log and REPORT.md")
-        if phase == "main":
-            main_result = next(item for item in build_report(run_dir) if item["phase"] == "main")
-            if main_result["failures"]:
-                metadata["high_skipped_reason"] = "Main phase had failed requests"
+        results = build_report(run_dir)
+        phase_result = next((item for item in results if item["phase"] == phase), None)
+        if phase_result:
+            print(f"Phase {phase} finished: RPS={phase_result['rps']}, failures={phase_result['failures']} ({phase_result['failure_percent']}%), p95={phase_result['p95_ms']}ms", flush=True)
+            if phase_result["failure_percent"] >= 40.0:
+                metadata["breakpoint_reason"] = f"Breakpoint crossed: failure rate {phase_result['failure_percent']}% >= 40% at phase {phase} ({users} users)"
                 (run_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+                print(f"Stopping stress ladder: {metadata['breakpoint_reason']}", flush=True)
                 break
 
 
@@ -242,7 +260,7 @@ def main():
             "phases": {},
         }
         (run_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-        run_phases(run_dir, metadata, admin_email, admin_password)
+        run_phases(run_dir, metadata, admin_email, admin_password, process)
         print(f"Finished. Download {run_dir} (CSV, HTML, logs, REPORT.md).", flush=True)
     finally:
         if process is not None:

@@ -1,11 +1,10 @@
-# Kaggle CPU — baseline của repository nhóm
+# Kaggle CPU — Benchmark & Đo tải Repository Nhóm
 
-Đã có [báo cáo nghiệm thu](REPORT.md) và [minh chứng Kaggle 21/10/2026](results/20261021T023505Z)
-cho commit `941ec24`. Đã đối chiếu ZIP/metadata/CSV/HTML/log. Không copy CSV/report
-của sales-service hay single-store-service rồi đổi tên: kết quả phải đúng commit store_ktpm.
-Bộ runner/workload/report được tái sử dụng và điều chỉnh từ performance của
-sales-service: database single_store_team, sáu bảng, Flyway V1/V2, JAR single-store,
-API sản phẩm/đơn và admin bootstrap của repository nhóm.
+Đã có [Báo cáo tổng kết hiệu năng](REPORT.md) bao gồm:
+1. **Pha 1 Baseline:** [Minh chứng Kaggle 21/10/2026](results/20261021T023505Z) cho commit `941ec24` (4 pha: 5, 10, 30, 60 users).
+2. **Pha 2 Stress Ladder & Capacity Limit:** [Minh chứng Kaggle 16/11/2026](results/20261116T145327Z) cho commit `60864d7` (11 pha: 5 đến 500 users, tổng 82.048 requests, bão hòa 207.04 RPS, xác định điểm gãy độ trễ tại 300–400 users).
+
+Bộ runner/workload/report được thiết kế chạy trực tiếp trên Kaggle CPU Notebook: database `single_store_team`, sáu bảng, Flyway V1/V2, JAR `single-store`, API sản phẩm/đơn và admin bootstrap.
 
 ## Thực hiện
 
