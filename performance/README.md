@@ -1,5 +1,13 @@
 # Kaggle CPU — Benchmark & Đo tải Repository Nhóm
 
+Cache sản phẩm dùng Caffeine trong bộ nhớ của một API instance. Cache danh sách
+theo từ khóa, trang và kích thước; cache chi tiết theo ID. Mặc định mỗi vùng cache
+có tối đa 1.000 mục và TTL 30 giây sau khi ghi; cấu hình bằng
+`app.product-cache.maximum-size` và `app.product-cache.ttl` (ví dụ `30s`).
+Khi sản phẩm hoặc tồn kho được ghi thành công, cache bị xóa sau commit; đọc trong
+transaction và đọc có khóa đi thẳng tới DB. Mỗi instance có cache riêng, do đó
+cấu hình này dành cho một instance và không đồng bộ giữa nhiều instance.
+
 Đã có [Báo cáo tổng kết hiệu năng](REPORT.md) bao gồm:
 1. **Pha 1 Baseline:** [Minh chứng Kaggle 21/10/2026](results/20261021T023505Z) cho commit `941ec24` (4 pha: 5, 10, 30, 60 users).
 2. **Pha 2 Stress Ladder & Capacity Limit:** [Minh chứng Kaggle 16/11/2026](results/20261116T145327Z) cho commit `60864d7` (11 pha: 5 đến 500 users, tổng 82.048 requests, bão hòa 207.04 RPS, xác định điểm gãy độ trễ tại 300–400 users).

@@ -1,7 +1,12 @@
 package vn.edu.sales.infrastructure.persistence.product;
 
 import org.springframework.stereotype.Repository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import vn.edu.sales.application.port.out.ProductPage;
 import vn.edu.sales.application.port.out.ProductRepository;
 import vn.edu.sales.domain.model.Product;
@@ -9,13 +14,22 @@ import vn.edu.sales.domain.model.ProductStatus;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Repository
 public class ProductRepositoryAdapter implements ProductRepository {
     private final SpringDataProductRepository repository;
+    private final Cache<PageKey, ProductPage> pages;
+    private final Cache<DetailKey, Product> details;
+    private final AtomicLong generation = new AtomicLong();
 
-    public ProductRepositoryAdapter(SpringDataProductRepository repository) {
+    public ProductRepositoryAdapter(SpringDataProductRepository repository,
+                                    @Value("${app.product-cache.ttl:30s}") Duration ttl,
+                                    @Value("${app.product-cache.maximum-size:1000}") long maximumSize) {
         this.repository = repository;
+        this.pages = Caffeine.newBuilder().expireAfterWrite(ttl).maximumSize(maximumSize).build();
+        this.details = Caffeine.newBuilder().expireAfterWrite(ttl).maximumSize(maximumSize).build();
     }
 
     @Override
@@ -24,7 +38,9 @@ public class ProductRepositoryAdapter implements ProductRepository {
                 product.id(), product.sku(), product.name(), product.description(), product.price(),
                 product.stockQuantity(), product.status(), product.version()
         );
-        return toDomain(repository.saveAndFlush(entity));
+        Product saved = toDomain(repository.saveAndFlush(entity));
+        invalidateAfterCommit();
+        return saved;
     }
 
     @Override
@@ -37,6 +53,14 @@ public class ProductRepositoryAdapter implements ProductRepository {
     @Override
     public ProductPage searchActive(String query, int page, int size) {
         String normalized = query == null ? "" : query.trim();
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            PageKey key = new PageKey(generation.get(), normalized, page, size);
+            return pages.get(key, ignored -> loadPage(normalized, page, size));
+        }
+        return loadPage(normalized, page, size);
+    }
+
+    private ProductPage loadPage(String normalized, int page, int size) {
         var result = repository.searchByStatus(ProductStatus.ACTIVE, normalized, PageRequest.of(page, size));
         return new ProductPage(result.getContent().stream().map(this::toDomain).toList(),
                 page, size, result.getTotalElements(), result.getTotalPages());
@@ -44,6 +68,10 @@ public class ProductRepositoryAdapter implements ProductRepository {
 
     @Override
     public Optional<Product> findById(Long id) {
+        if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+            return Optional.ofNullable(details.get(new DetailKey(generation.get(), id),
+                    ignored -> repository.findById(id).map(this::toDomain).orElse(null)));
+        }
         return repository.findById(id).map(this::toDomain);
     }
 
@@ -57,7 +85,9 @@ public class ProductRepositoryAdapter implements ProductRepository {
         List<ProductJpaEntity> entities = products.stream().map(product -> new ProductJpaEntity(
                 product.id(), product.sku(), product.name(), product.description(), product.price(),
                 product.stockQuantity(), product.status(), product.version())).toList();
-        return repository.saveAll(entities).stream().map(this::toDomain).toList();
+        List<Product> saved = repository.saveAll(entities).stream().map(this::toDomain).toList();
+        invalidateAfterCommit();
+        return saved;
     }
 
     @Override
@@ -71,4 +101,24 @@ public class ProductRepositoryAdapter implements ProductRepository {
                 entity.getStockQuantity(), entity.getStatus(), entity.getVersion()
         );
     }
+
+    private void invalidateAfterCommit() {
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { invalidate(); }
+            });
+        } else {
+            invalidate();
+        }
+    }
+
+    private void invalidate() {
+        generation.incrementAndGet();
+        pages.invalidateAll();
+        details.invalidateAll();
+    }
+
+    private record PageKey(long generation, String query, int page, int size) {}
+    private record DetailKey(long generation, Long id) {}
 }
