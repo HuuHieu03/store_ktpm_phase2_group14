@@ -107,8 +107,9 @@ def build_report(run_dir):
             "## Toàn vẹn tồn kho SKU nóng",
             "",
             "Đúng khi `tồn đầu − đã bán = tồn cuối`, tổng `inventory_movements` = tồn cuối, "
-            "tồn cuối ≥ 0 và không bán vượt tồn đầu. Số 201 của Locust chỉ để đối chiếu: "
-            "request cuối có thể hoàn tất sau khi Locust dừng.",
+            "tồn cuối ≥ 0 và không bán vượt tồn đầu. Runner chờ các đơn còn xếp hàng commit xong "
+            "rồi đọc cả bốn số trong một câu SQL (cùng một snapshot). Số 201 của Locust chỉ để "
+            "đối chiếu: request cuối có thể hoàn tất sau khi Locust dừng.",
             "",
             "| Pha | Tồn đầu | Đã bán | Đơn DB | 201 Locust | Tồn cuối | Tổng movements | Kết quả |",
             "|---|---:|---:|---:|---:|---:|---:|---|",

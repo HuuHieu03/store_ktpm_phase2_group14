@@ -242,20 +242,41 @@ def locust_successes(run_dir, phase):
     return int(float(aggregate["Request Count"])) - int(float(aggregate["Failure Count"]))
 
 
-def hot_product_integrity(product_id, initial_stock, locust_success):
+def wait_for_orders_to_settle(product_id, stable_polls=3, timeout=120):
+    """Server keeps committing queued orders after Locust stops; wait until the count is stable."""
+    query = ("SELECT COUNT(*) FROM single_store_team.order_items "
+             f"WHERE product_id={int(product_id)}")
+    started = time.monotonic()
+    previous, stable = None, 0
+    while time.monotonic() - started < timeout:
+        current = int(mysql(query))
+        stable = stable + 1 if current == previous else 0
+        if stable >= stable_polls:
+            return round(time.monotonic() - started, 1)
+        previous = current
+        time.sleep(1)
+    return None
+
+
+def hot_product_integrity(product_id, initial_stock, locust_success, settle_seconds):
     pid = int(product_id)
-    stock_after = int(mysql(f"SELECT stock_quantity FROM single_store_team.products WHERE id={pid}"))
-    sold, orders = (int(value) for value in mysql(
-        "SELECT COALESCE(SUM(oi.quantity),0), COUNT(DISTINCT o.id) "
-        "FROM single_store_team.order_items oi JOIN single_store_team.orders o ON o.id=oi.order_id "
-        f"WHERE oi.product_id={pid} AND o.status<>'CANCELLED'").split())
-    movements_sum = int(mysql("SELECT COALESCE(SUM(quantity_change),0) "
-                              f"FROM single_store_team.inventory_movements WHERE product_id={pid}"))
+    # One statement reads one InnoDB snapshot, so the three numbers cannot drift apart.
+    stock_after, sold, orders, movements_sum = (int(value) for value in mysql(
+        "SELECT p.stock_quantity, "
+        "(SELECT COALESCE(SUM(oi.quantity),0) FROM single_store_team.order_items oi "
+        " JOIN single_store_team.orders o ON o.id=oi.order_id "
+        " WHERE oi.product_id=p.id AND o.status<>'CANCELLED'), "
+        "(SELECT COUNT(DISTINCT oi.order_id) FROM single_store_team.order_items oi "
+        " JOIN single_store_team.orders o ON o.id=oi.order_id "
+        " WHERE oi.product_id=p.id AND o.status<>'CANCELLED'), "
+        "(SELECT COALESCE(SUM(m.quantity_change),0) FROM single_store_team.inventory_movements m "
+        " WHERE m.product_id=p.id) "
+        f"FROM single_store_team.products p WHERE p.id={pid}").split())
     ok = (initial_stock - sold == stock_after and movements_sum == stock_after
           and stock_after >= 0 and sold <= initial_stock)
     return {"initial_stock": initial_stock, "sold": sold, "orders_created": orders,
             "stock_after": stock_after, "movements_sum": movements_sum,
-            "locust_201": locust_success, "ok": ok}
+            "locust_201": locust_success, "settle_seconds": settle_seconds, "ok": ok}
 
 
 class ResourceSampler(threading.Thread):
@@ -380,12 +401,13 @@ def run_phases(run_dir, metadata, admin_email, admin_password, api_process, scen
         finally:
             if fixture_path is not None:
                 fixture_path.unlink(missing_ok=True)
-        phase_metadata = {"users": users, "duration_seconds": seconds, "exit_code": returncode,
-                          "innodb": innodb_delta(innodb_before, innodb_counters())}
+        phase_metadata = {"users": users, "duration_seconds": seconds, "exit_code": returncode}
         if hot_product_id is not None:
+            settle_seconds = wait_for_orders_to_settle(hot_product_id)
             phase_metadata["hot_product_id"] = hot_product_id
             phase_metadata["integrity"] = hot_product_integrity(
-                hot_product_id, initial_stock, locust_successes(run_dir, phase))
+                hot_product_id, initial_stock, locust_successes(run_dir, phase), settle_seconds)
+        phase_metadata["innodb"] = innodb_delta(innodb_before, innodb_counters())
         metadata["phases"][phase] = phase_metadata
         (run_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
         results = build_report(run_dir)
