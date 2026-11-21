@@ -7,7 +7,23 @@ import re
 from pathlib import Path
 
 
-PHASES = ("smoke", "baseline", "main", "high")
+SCENARIO_NOTES = {
+    "stress": [
+        "- Trọng số tác vụ mục tiêu: 60% danh sách sản phẩm, 15% chi tiết, 10% đăng nhập, "
+        "10% đơn của tôi, 5% tạo đơn.",
+        "- Mỗi người dùng ảo có một sản phẩm tồn kho lớn riêng; request chuẩn bị "
+        "tài khoản/sản phẩm không tính vào số liệu Locust.",
+    ],
+    "hotspot": [
+        "- Kịch bản hotspot: mọi người dùng ảo cùng đặt 1 SKU (quantity 1), không think time.",
+        "- Mỗi pha dùng một SKU nóng mới; pha `oversell_*` có tồn kho nhỏ nên lỗi "
+        "`out_of_stock` là kỳ vọng, không phải lỗi hệ thống.",
+        "- Locust trả exit code 1 khi có request thất bại; đọc `*_failures.csv` để phân loại.",
+    ],
+    "soak": [
+        "- Kịch bản soak: cùng workload 60/15/10/10/5 như stress, giữ tải cố định trong thời gian dài.",
+    ],
+}
 
 
 def read_phase(run_dir, phase, config):
@@ -60,9 +76,11 @@ def build_report(run_dir):
         writer.writeheader()
         writer.writerows(results)
 
+    scenario = metadata.get("scenario", "stress")
     lines = [
         "# Báo cáo kiểm thử tải Single Store Team",
         "",
+        f"- Kịch bản: `{scenario}`",
         f"- Thời điểm UTC: {metadata['started_at_utc']}",
         f"- Git commit: `{metadata['git_commit']}`",
         f"- Nơi chạy: {metadata['environment']}",
@@ -71,10 +89,7 @@ def build_report(run_dir):
         f"- MySQL: {metadata['mysql_version']}",
         f"- Locust: {metadata['locust_version']}",
         "- API và MySQL chạy trên cùng phiên CPU; Locust gọi qua localhost.",
-        "- Trọng số tác vụ mục tiêu: 60% danh sách sản phẩm, 15% chi tiết, 10% đăng nhập, "
-        "10% đơn của tôi, 5% tạo đơn.",
-        "- Mỗi người dùng ảo có một sản phẩm tồn kho lớn riêng; request chuẩn bị "
-        "tài khoản/sản phẩm không tính vào số liệu Locust.",
+        *SCENARIO_NOTES.get(scenario, []),
         "",
         "| Pha | Users | Giây | Requests | Lỗi | Lỗi % | RPS | p50 ms | p95 ms | p99 ms |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
@@ -84,6 +99,38 @@ def build_report(run_dir):
                      "{failure_percent} | {rps} | {p50_ms} | {p95_ms} | {p99_ms} |".format(**row))
     if metadata.get("high_skipped_reason"):
         lines += ["", f"Pha tải cao đã bỏ qua: {metadata['high_skipped_reason']}."]
+    integrity = [(phase, config["integrity"]) for phase, config in metadata["phases"].items()
+                 if config.get("integrity")]
+    if integrity:
+        lines += [
+            "",
+            "## Toàn vẹn tồn kho SKU nóng",
+            "",
+            "Đúng khi `tồn đầu − đã bán = tồn cuối`, tổng `inventory_movements` = tồn cuối, "
+            "tồn cuối ≥ 0 và không bán vượt tồn đầu. Số 201 của Locust chỉ để đối chiếu: "
+            "request cuối có thể hoàn tất sau khi Locust dừng.",
+            "",
+            "| Pha | Tồn đầu | Đã bán | Đơn DB | 201 Locust | Tồn cuối | Tổng movements | Kết quả |",
+            "|---|---:|---:|---:|---:|---:|---:|---|",
+        ]
+        for phase, row in integrity:
+            lines.append(f"| {phase} | {row['initial_stock']} | {row['sold']} | {row['orders_created']} | "
+                         f"{row['locust_201']} | {row['stock_after']} | {row['movements_sum']} | "
+                         f"{'OK' if row['ok'] else 'FAIL'} |")
+    locks = [(phase, config["innodb"]) for phase, config in metadata["phases"].items()
+             if config.get("innodb")]
+    if locks:
+        lines += [
+            "",
+            "## Tranh chấp khoá InnoDB (chênh lệch trong pha)",
+            "",
+            "| Pha | Row lock waits | Row lock time ms | Lock timeouts | Deadlocks |",
+            "|---|---:|---:|---:|---:|",
+        ]
+        for phase, row in locks:
+            lines.append(f"| {phase} | {row.get('Innodb_row_lock_waits', '')} | "
+                         f"{row.get('Innodb_row_lock_time', '')} | {row.get('lock_timeouts', '')} | "
+                         f"{row.get('lock_deadlocks', '')} |")
     lines += [
         "",
         "## Đối chiếu tự động",
@@ -95,12 +142,12 @@ def build_report(run_dir):
         "- Số liệu chỉ mô tả các pha có trong bảng; một pha smoke không chứng minh toàn bộ bốn mức tải.",
         "- Các pha chạy tuần tự trên cùng database, dữ liệu người dùng/đơn tăng dần; "
         "đây là giới hạn của phép so sánh giữa các pha.",
-        "- Kết quả là baseline Pha 1, không phải cam kết hiệu năng production.",
+        "- Kết quả chỉ mô tả commit và môi trường ở trên, không phải cam kết hiệu năng production.",
         "",
         "## Tệp minh chứng",
         "",
         "`metadata.json`, `summary.csv`, `*_stats.csv`, `*_failures.csv`, "
-        "`*_stats_history.csv`, `*_report.html`, `api.log`.",
+        "`*_stats_history.csv`, `*_report.html`, `*_resources.csv`, `*_locust.log`, `api.log`.",
         "",
     ]
     api_log = run_dir / "api.log"
