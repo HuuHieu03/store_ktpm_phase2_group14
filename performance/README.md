@@ -11,6 +11,7 @@ cấu hình này dành cho một instance và không đồng bộ giữa nhiều
 Đã có [Báo cáo tổng kết hiệu năng](REPORT.md) bao gồm:
 1. **Pha 1 Baseline:** [Minh chứng Kaggle 21/10/2026](results/20261021T023505Z) cho commit `941ec24` (4 pha: 5, 10, 30, 60 users).
 2. **Pha 2 Stress Ladder & Capacity Limit:** [Minh chứng Kaggle 16/11/2026](results/20261116T145327Z) cho commit `60864d7` (11 pha: 5 đến 500 users, tổng 82.048 requests, bão hòa 207.04 RPS, xác định điểm gãy độ trễ tại 300–400 users).
+3. **Pha 2 Hotspot (TEST-00b):** [Minh chứng Kaggle 21/11/2026](results/20261121T153809Z) cho commit `462fecf` (10–200 user cùng đặt 1 SKU: trần ~48 đơn/giây, p95 290 ms → 4,3 s; toàn vẹn tồn kho OK cả 5 pha, oversell bán đúng 300/300). `api.log` đã che mật khẩu dev do Spring tự sinh.
 
 Bộ runner/workload/report được thiết kế chạy trực tiếp trên Kaggle CPU Notebook: database `single_store_team`, sáu bảng, Flyway V1/V2, JAR `single-store`, API sản phẩm/đơn và admin bootstrap.
 
