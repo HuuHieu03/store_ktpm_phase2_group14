@@ -24,7 +24,10 @@ public interface SpringDataOrderRepository extends JpaRepository<OrderJpaEntity,
     @EntityGraph(attributePaths = "items")
     List<OrderJpaEntity> findAllByStatusOrderByCreatedAtDesc(OrderStatus status);
 
+    // No join fetch: with "distinct ... join fetch" Hibernate on H2 reads the row first and locks it in a
+    // follow-on query, so a waiting cancel still saw PENDING and restored stock twice. Items load lazily
+    // after the lock, inside the same transaction.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select distinct o from OrderJpaEntity o left join fetch o.items where o.id = :id")
+    @Query("select o from OrderJpaEntity o where o.id = :id")
     Optional<OrderJpaEntity> findByIdForUpdate(@Param("id") Long id);
 }
