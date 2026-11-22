@@ -109,3 +109,26 @@ Tài liệu này tổng hợp toàn bộ các đợt thực nghiệm kiểm th�
 | **Độ trễ p50** | 3 ms (ở 60 users) | 6 ms (ở 60 users) -> 180 ms (500 users) | Khảo sát được đường cong suy thoái |
 | **Độ trễ p95** | 82 ms (ở 60 users) | 100 ms (ở 60 users) -> 730 ms (500 users) | Xác định điểm gãy từ 300-400 users |
 | **Tỷ lệ lỗi (Error)** | 0.0% | 0.0% | Ổn định xuyên suốt toàn bài đo |
+
+---
+
+## PHẦN 4: Hotspot 1 SKU — CONC-01 trước/sau (TEST-00b, CONC-01.5)
+
+Cùng runner `LOAD_SCENARIO=hotspot`, cùng loại máy Kaggle CPU (4 luồng, MySQL 8.0.46 cấu hình mặc định của Ubuntu). Mỗi phiên bản đo **một lượt**. Đơn/s = số đơn trong DB ÷ thời gian pha, lấy từ bảng toàn vẹn tồn kho trong từng REPORT.
+
+| Pha | Trước: `FOR UPDATE` (`462fecf`, [20261121T153809Z](results/20261121T153809Z/REPORT.md)) | CONC-01.3 bị bác (`58af98f`, [20261122T090451Z](results/20261122T090451Z/REPORT.md)) | Sau: UPDATE nguyên tử (`a75256d`, [20261122T104048Z](results/20261122T104048Z/REPORT.md)) |
+| :--- | :--- | :--- | :--- |
+| hotspot_10 | 43,8 đơn/s · p95 290 ms | 21,0 đơn/s · 82% lỗi 409 | 42,7 đơn/s · p95 290 ms |
+| hotspot_50 | 48,4 đơn/s · p95 1.100 ms | 24,8 đơn/s · 88% lỗi 409 | 43,1 đơn/s · p95 1.400 ms |
+| hotspot_100 | 49,5 đơn/s · p95 2.300 ms | 26,2 đơn/s · 88% lỗi 409 | 46,9 đơn/s · p95 2.300 ms |
+| hotspot_200 | 50,0 đơn/s · p95 4.300 ms | 24,5 đơn/s · 88% lỗi 409 | 48,5 đơn/s · p95 4.500 ms |
+| Deadlock (tổng 4 pha) | 0 | 50.599 | 0 |
+| Toàn vẹn tồn kho / oversell | OK · 300/300 | OK · 300/300 | OK · 300/300 |
+
+Thời gian chờ khoá trung bình mỗi lần ở hotspot_10: 194 ms (trước) và 197 ms (sau). CPU mysqld 26–28% ở cả hai phiên; CPU API tương đương (hotspot_10: 98% so với 110%, các pha còn lại lệch ≤ 3 điểm %).
+
+**Kết luận:**
+- **UPDATE nguyên tử không tăng thông lượng cho 1 SKU nóng.** Sau CONC-01, số đơn/s thấp hơn 3–11% ở cả 4 pha. Với 1 lượt đo mỗi bên trên hai phiên Kaggle khác nhau, mức lệch này chưa đủ để kết luận là tệ hơn, nhưng chắc chắn là không cải thiện.
+- **Trần ~48 đơn/s ≈ 21 ms giữ khoá mỗi đơn, nhiều khả năng phần lớn là chi phí commit (giả thuyết, chưa đo trực tiếp trên Kaggle).** Khoá dòng chỉ nhả *sau* commit, mà mỗi commit với `innodb_flush_log_at_trx_commit=1` và `sync_binlog=1` (mặc định) phải chờ ghi đĩa. Vì vậy các đơn cùng SKU xếp hàng qua từng lần fsync, khoá bằng `FOR UPDATE` hay `UPDATE` đều như nhau. Đo vi mô trên MySQL 8.4 bằng Docker (máy dev, không phải Kaggle), cùng chuỗi `UPDATE` dòng nóng + `INSERT` + `COMMIT` tuần tự: **8,9 ms/tx** khi có fsync mỗi commit, **0,16 ms/tx** khi tắt. Trên Kaggle chưa đo trực tiếp vì runner chưa ghi các biến này vào metadata.
+- CONC-01 vẫn giữ được các lợi ích về tính đúng: bỏ đọc–sửa–ghi trên entity, sửa lỗi huỷ đơn hai lần (`58af98f`), ghim thứ tự khoá tránh deadlock khoá ngoại.
+- Muốn vượt trần thì phải bỏ việc mỗi đơn chiếm riêng một lần commit trên cùng một dòng: chia tồn kho SKU nóng thành nhiều phần (nhiều commit chạy song song, InnoDB gộp được fsync), hoặc gom đơn theo lô qua hàng đợi (một commit cho nhiều đơn). Nới độ bền ghi đĩa chỉ nên dùng để kiểm chứng giả thuyết, không phải giải pháp cho dữ liệu đơn hàng. Phân tích đầy đủ trong [ADR CONC-01](../worklogs/2026-11-22_sonha_db_adr-atomic-stock-update.md).

@@ -10,7 +10,7 @@ author:
 time_spent: "Chưa ghi nhận"
 phase: "Phase 2 - Architecture Analysis & Refactoring"
 category: "db"
-status: "in-progress"
+status: "completed"
 task_ref:
   issue: "CONC-01 (sheet tiến độ nhóm 14), PR #3"
   branch: "son"
@@ -21,6 +21,7 @@ task_ref:
     - "bab2cb7"
     - "58af98f"
     - "a75256d"
+    - "82e5adc"
 tags:
   - "adr"
   - "concurrency"
@@ -32,12 +33,13 @@ tags:
 
 # ADR CONC-01: Trừ/hoàn kho bằng UPDATE nguyên tử, khoá dòng sản phẩm trước khi ghi đơn
 
-**Trạng thái quyết định:** Chấp nhận. Chờ số đo Kaggle trên commit `a75256d` để đóng CONC-01.5.
+**Trạng thái quyết định:** Chấp nhận vì tính đúng. **Không đạt mục tiêu hiệu năng:** Kaggle trên `a75256d` vẫn ~43–49 đơn/s (mục 5.4). Hướng tăng thông lượng chuyển sang phương án D/E.
 
 ## 1. Tóm tắt nhanh
 
 - **Vấn đề giải quyết:** Nhiều người cùng đặt một SKU bị xếp hàng sau khoá bi quan `SELECT … FOR UPDATE`. TEST-00b đo được trần khoảng 48 đơn/s, p95 lên 4,3 s khi CPU còn rảnh.
 - **Quyết định:** Trừ kho bằng `UPDATE … WHERE stock_quantity >= ?` (hoàn kho tương tự), kiểm tra số dòng bị ảnh hưởng, và **chạy UPDATE trước khi ghi `order_items`**. Huỷ đơn khoá dòng đơn bằng chính câu đọc.
+- **Kết quả đo (CONC-01.5):** không còn deadlock, toàn vẹn OK, nhưng thông lượng 1 SKU nóng **không tăng** (42,7–48,5 so với 43,8–50 đơn/s). Trần nằm ở chi phí commit trong vùng khoá, không nằm ở cách khoá.
 - **Bài học chính:** Một lần thử "ghi đơn trước, khoá kho sau" (CONC-01.3) gây deadlock hàng loạt trên MySQL, dù mọi test trên H2 đều pass. Số đơn/s tụt còn khoảng một nửa. Lần thử đó đã được revert, và thứ tự khoá được ghim bằng test.
 
 ## 2. Mục tiêu & Phạm vi
@@ -47,7 +49,7 @@ tags:
 - [x] Bỏ `FOR UPDATE` khỏi `OrderService.create`, trừ kho nguyên tử (CONC-01.2).
 - [x] ~~Rút ngắn vùng khoá bằng cách ghi đơn trước (CONC-01.3).~~ Đã thử, bác bỏ (mục 5.2).
 - [x] Hoàn kho khi huỷ đơn bằng UPDATE nguyên tử (CONC-01.4).
-- [ ] So sánh trước/sau trên Kaggle với mốc 48 đơn/s (CONC-01.5): chờ lần chạy trên `a75256d`.
+- [x] So sánh trước/sau trên Kaggle với mốc 48 đơn/s (CONC-01.5): không cải thiện (mục 5.4).
 
 ### Ngoài phạm vi
 - Chỉnh kho của admin (`ProductService`, `InventoryService`) vẫn dùng `FOR UPDATE`. Đây là đường ít tải; hai cơ chế khoá chạy đúng cùng nhau.
@@ -168,8 +170,22 @@ H2 không đặt khoá S khi kiểm khoá ngoại, nên các fitness function tr
 
 `findByIdForUpdate` dùng `select distinct … left join fetch items`. Trên H2, Hibernate chạy câu này thành một lần đọc **không khoá** rồi mới khoá bằng câu `select id … for update` riêng. Hai lệnh huỷ đồng thời đều thấy PENDING và cùng hoàn kho; lần thứ hai chỉ bị chặn bởi UNIQUE `reference_code`, nên trả 500. Lỗi có từ trước CONC-01 (đã kiểm trên `890862d`). Sửa ở `58af98f`: bỏ `join fetch` để câu đọc chính là `FOR UPDATE`, items nạp lazy trong cùng transaction.
 
-### 5.4. Kết quả CONC-01.5
-Chờ lần chạy Kaggle trên `a75256d`. Sẽ cập nhật bảng so sánh vào `performance/REPORT.md`.
+### 5.4. Kết quả CONC-01.5: không tăng thông lượng
+
+Kaggle [`20261122T104048Z`](../performance/results/20261122T104048Z/REPORT.md) trên `a75256d`, so với mốc [`20261121T153809Z`](../performance/results/20261121T153809Z/REPORT.md) (bảng đầy đủ ở `performance/REPORT.md`, PHẦN 4):
+
+| Pha | Trước `FOR UPDATE` | Sau UPDATE nguyên tử | p95 trước → sau | Thời gian khoá InnoDB (ms) trước → sau |
+| :--- | ---: | ---: | :--- | :--- |
+| hotspot_10 | 43,8 đơn/s | 42,7 đơn/s | 290 → 290 ms | 510.465 → 505.917 |
+| hotspot_50 | 48,4 | 43,1 | 1.100 → 1.400 ms | 531.415 → 528.959 |
+| hotspot_100 | 49,5 | 46,9 | 2.300 → 2.300 ms | 813.006 → 812.497 |
+| hotspot_200 | 50,0 | 48,5 | 4.300 → 4.500 ms | 831.648 → 828.958 |
+
+0 deadlock, 0 lỗi, toàn vẹn tồn kho OK cả 5 pha, oversell bán đúng 300/300. Mỗi bên chỉ 1 lượt đo nên mức lệch −3% đến −11% chưa đủ để nói là tệ hơn, nhưng rõ ràng là không cải thiện.
+
+**Vì sao:** khoá dòng chỉ nhả sau commit. Với cấu hình MySQL mặc định (`innodb_flush_log_at_trx_commit=1`, `sync_binlog=1`), mỗi commit chờ ghi đĩa, nên các đơn cùng SKU xếp hàng qua từng lần fsync. Đổi `FOR UPDATE` sang `UPDATE`, hay đảo thứ tự các câu bên trong, đều không làm vùng khoá ngắn hơn phần commit đó. Đo vi mô trên MySQL 8.4 bằng Docker ở máy dev, chuỗi `UPDATE` dòng nóng + `INSERT` + `COMMIT` tuần tự: **8,9 ms/tx** với fsync mỗi commit, **0,16 ms/tx** khi tắt. Trên Kaggle, ~21 ms/đơn khớp với giả thuyết này, nhưng chưa đo trực tiếp vì runner không ghi các biến độ bền vào metadata.
+
+**Hệ quả cho quyết định:** giữ C vì tính đúng (bỏ đọc–sửa–ghi entity, thứ tự khoá chống deadlock khoá ngoại) và vì C là nền cho D (mỗi phần tồn kho vẫn trừ bằng UPDATE có điều kiện). Mục tiêu hiệu năng của CONC-01 chưa đạt bằng thay đổi cấp câu lệnh SQL. Theo Bass, đây là lúc chuyển từ *control resource demand* sang *manage resources*: *introduce concurrency* (D) hoặc *schedule resources / bound queue* kèm gom lô (E).
 
 ## 6. Khó khăn & Rủi ro
 
@@ -182,9 +198,10 @@ Chờ lần chạy Kaggle trên `a75256d`. Sẽ cập nhật bảng so sánh và
 
 ## 7. Kế hoạch tiếp theo
 
-- [ ] Chạy hotspot trên Kaggle với `a75256d`, ghi bảng trước/sau vào `performance/REPORT.md` (Sơn, hạn `2026-11-29`).
-- [ ] Chốt SLO hotspot với nhóm (TEST-00b.5) để quyết có cần phương án D/E hay không (Sơn + nhóm, `2026-11-29`).
-- [ ] PERF-06: bỏ `entityManager.refresh`, ghi `inventory_movements` theo lô, để rút ngắn vùng khoá mà không đảo thứ tự (Sơn, `2026-12-06`).
+- [x] Chạy hotspot trên Kaggle với `a75256d`, ghi bảng trước/sau vào `performance/REPORT.md` (Sơn, xong `2026-11-22`).
+- [ ] Chốt SLO hotspot với nhóm (TEST-00b.5). Nếu SLO > ~50 đơn/s cho 1 SKU thì phải làm D hoặc E (Sơn + nhóm, `2026-11-29`).
+- [ ] Runner ghi `innodb_flush_log_at_trx_commit`, `sync_binlog`, `log_bin` vào `metadata.json`; có thể thêm một lượt chẩn đoán với độ bền nới lỏng để kiểm chứng giả thuyết fsync trên Kaggle. Chỉ để chẩn đoán, không dùng làm số "sau cải tiến" (Sơn).
+- [ ] PERF-06 (bỏ `refresh`, ghi movements theo lô): giảm vài câu trong vùng khoá, nhưng theo mục 5.4 **khó tăng thông lượng 1 SKU** vì phần commit vẫn còn. Cần đo lại trước khi kỳ vọng (Sơn, `2026-12-06`).
 - [ ] Script kiểm tra deadlock 2 phiên trên MySQL bằng Docker làm fitness function cục bộ (Sơn).
 
 ## 8. Tài liệu tham khảo
@@ -196,5 +213,5 @@ Chờ lần chạy Kaggle trên `a75256d`. Sẽ cập nhật bảng so sánh và
    [Queue-Based Load Leveling](https://learn.microsoft.com/en-us/azure/architecture/patterns/queue-based-load-leveling) (không hợp khi bên gọi cần phản hồi đồng bộ).
 3. Microsoft, *Microsoft Application Architecture Guide*, 2nd Edition: hướng dẫn tầng dữ liệu về concurrency/transaction (transaction ngắn, chọn mô hình khoá, truy cập tài nguyên theo cùng thứ tự).
 4. Len Bass et al., *Software Architecture in Practice*, 4th Edition: kịch bản thuộc tính chất lượng, performance tactics (control resource demand / manage resources).
-5. Minh chứng: [`performance/results/20261121T153809Z`](../performance/results/20261121T153809Z/REPORT.md) (trước), [`performance/results/20261122T090451Z`](../performance/results/20261122T090451Z/REPORT.md) (CONC-01.3, bị bác).
+5. Minh chứng: [`performance/results/20261121T153809Z`](../performance/results/20261121T153809Z/REPORT.md) (trước), [`performance/results/20261122T090451Z`](../performance/results/20261122T090451Z/REPORT.md) (CONC-01.3, bị bác), [`performance/results/20261122T104048Z`](../performance/results/20261122T104048Z/REPORT.md) (sau, `a75256d`).
 6. MySQL 8.0 Reference Manual, *InnoDB Locking* và *Locks Set by Different SQL Statements in InnoDB* (khoá S khi kiểm khoá ngoại).

@@ -1,0 +1,128 @@
+{
+  "started_at_utc": "2026-11-22T10:42:50.064892+00:00",
+  "environment": "Kaggle CPU Notebook",
+  "scenario": "hotspot",
+  "git_commit": "a75256d10a4243fb212a16d35686028e8ed9337e",
+  "cpu_count": 4,
+  "memory_gb": 31.35,
+  "java_version": "openjdk version \"21.0.13.1\" 2026-11-17",
+  "mysql_version": "8.0.46-0ubuntu0.24.04.5",
+  "locust_version": "locust 2.32.1 from /usr/local/lib/python3.13/dist-packages/locust (Python 3.13.18)",
+  "phases": {
+    "hotspot_10": {
+      "users": 10,
+      "duration_seconds": 60,
+      "exit_code": 0,
+      "hot_product_id": 13,
+      "integrity": {
+        "initial_stock": 1000000,
+        "sold": 2562,
+        "orders_created": 2562,
+        "stock_after": 997438,
+        "movements_sum": 997438,
+        "locust_201": 2521,
+        "settle_seconds": 3.0,
+        "ok": true
+      },
+      "innodb": {
+        "Innodb_row_lock_time": 505917,
+        "Innodb_row_lock_waits": 2561,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 382
+      }
+    },
+    "hotspot_50": {
+      "users": 50,
+      "duration_seconds": 60,
+      "exit_code": 0,
+      "hot_product_id": 54,
+      "integrity": {
+        "initial_stock": 1000000,
+        "sold": 2588,
+        "orders_created": 2588,
+        "stock_after": 997412,
+        "movements_sum": 997412,
+        "locust_201": 2513,
+        "settle_seconds": 4.1,
+        "ok": true
+      },
+      "innodb": {
+        "Innodb_row_lock_time": 528959,
+        "Innodb_row_lock_waits": 2587,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 382
+      }
+    },
+    "hotspot_100": {
+      "users": 100,
+      "duration_seconds": 90,
+      "exit_code": 0,
+      "hot_product_id": 105,
+      "integrity": {
+        "initial_stock": 1000000,
+        "sold": 4223,
+        "orders_created": 4223,
+        "stock_after": 995777,
+        "movements_sum": 995777,
+        "locust_201": 4099,
+        "settle_seconds": 5.1,
+        "ok": true
+      },
+      "innodb": {
+        "Innodb_row_lock_time": 812497,
+        "Innodb_row_lock_waits": 4222,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 382
+      }
+    },
+    "hotspot_200": {
+      "users": 200,
+      "duration_seconds": 90,
+      "exit_code": 0,
+      "hot_product_id": 206,
+      "integrity": {
+        "initial_stock": 1000000,
+        "sold": 4361,
+        "orders_created": 4361,
+        "stock_after": 995639,
+        "movements_sum": 995639,
+        "locust_201": 4141,
+        "settle_seconds": 7.1,
+        "ok": true
+      },
+      "innodb": {
+        "Innodb_row_lock_time": 828958,
+        "Innodb_row_lock_waits": 4360,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 382
+      }
+    },
+    "oversell_100": {
+      "users": 100,
+      "duration_seconds": 60,
+      "exit_code": 1,
+      "hot_product_id": 207,
+      "integrity": {
+        "initial_stock": 300,
+        "sold": 300,
+        "orders_created": 300,
+        "stock_after": 0,
+        "movements_sum": 0,
+        "locust_201": 300,
+        "settle_seconds": 3.0,
+        "ok": true
+      },
+      "innodb": {
+        "Innodb_row_lock_time": 61204,
+        "Innodb_row_lock_waits": 308,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 382
+      }
+    }
+  }
+}
