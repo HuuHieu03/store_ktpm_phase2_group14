@@ -312,8 +312,18 @@ class ProductServiceTest {
         }
 
         @Override
+        public List<Product> findAllByIds(List<Long> ids) {
+            return findAllByIdsForUpdate(ids);
+        }
+
+        @Override
         public List<Product> findAllByIdsForUpdate(List<Long> ids) {
             return products.stream().filter(product -> ids.contains(product.id())).toList();
+        }
+
+        @Override
+        public java.util.OptionalInt decreaseStock(Long productId, int quantity) {
+            throw new UnsupportedOperationException("ProductService does not sell stock");
         }
 
         @Override

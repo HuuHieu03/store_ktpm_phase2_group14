@@ -4,6 +4,7 @@ import vn.edu.sales.domain.model.Product;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 public interface ProductRepository {
     Product save(Product product);
@@ -14,7 +15,12 @@ public interface ProductRepository {
 
     Optional<Product> findById(Long id);
 
+    List<Product> findAllByIds(List<Long> ids);
+
     List<Product> findAllByIdsForUpdate(List<Long> ids);
+
+    /** Atomically subtracts quantity from an ACTIVE product; returns the new stock, or empty if stock is short. */
+    OptionalInt decreaseStock(Long productId, int quantity);
 
     List<Product> saveAll(List<Product> products);
 

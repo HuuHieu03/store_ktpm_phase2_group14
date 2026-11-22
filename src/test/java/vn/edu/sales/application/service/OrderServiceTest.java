@@ -10,6 +10,7 @@ import vn.edu.sales.domain.model.*;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,7 +51,8 @@ class OrderServiceTest {
 
     @Test
     void createsOrderWithServerCalculatedTotalAndDecreasesStock() {
-        when(products.findAllByIdsForUpdate(List.of(11L))).thenReturn(List.of(keyboard));
+        when(products.findAllByIds(List.of(11L))).thenReturn(List.of(keyboard));
+        when(products.decreaseStock(11L, 2)).thenReturn(OptionalInt.of(3));
         when(orders.save(any(Order.class))).thenAnswer(call -> {
             Order input = call.getArgument(0);
             return new Order(21L, input.orderCode(), input.userId(), input.recipientName(),
@@ -66,21 +68,36 @@ class OrderServiceTest {
         assertThat(result.totalAmount()).isEqualByComparingTo("251.00");
         assertThat(result.items().getFirst().productName()).isEqualTo("Bàn phím");
         assertThat(result.items().getFirst().unitPrice()).isEqualByComparingTo("125.50");
-        verify(products).saveAll(argThat(list -> list.size() == 1 && list.getFirst().stockQuantity() == 3));
+        verify(products, never()).findAllByIdsForUpdate(anyList());
+        verify(products, never()).saveAll(anyList());
         verify(inventory).record(eq(11L), eq(21L), eq("SALE"), eq(-2), eq(5), eq(3),
                 anyString(), eq("Đặt hàng"), eq(3L));
     }
 
     @Test
     void insufficientStockDoesNotSaveOrderOrChangeInventory() {
-        when(products.findAllByIdsForUpdate(List.of(11L))).thenReturn(List.of(keyboard));
+        when(products.findAllByIds(List.of(11L))).thenReturn(List.of(keyboard));
 
         assertThatThrownBy(() -> service.create("customer@example.com", "Người nhận",
                 "0901234567", "Hà Nội",
                 List.of(new OrderService.CreateLine(11L, 6))))
                 .isInstanceOf(BusinessConflictException.class);
 
-        verify(products, never()).saveAll(anyList());
+        verify(products, never()).decreaseStock(anyLong(), anyInt());
+        verifyNoInteractions(orders, inventory);
+    }
+
+    @Test
+    void stockTakenByConcurrentBuyerRejectsOrderWithoutSavingIt() {
+        when(products.findAllByIds(List.of(11L))).thenReturn(List.of(keyboard));
+        when(products.decreaseStock(11L, 2)).thenReturn(OptionalInt.empty());
+
+        assertThatThrownBy(() -> service.create("customer@example.com", "Người nhận",
+                "0901234567", "Hà Nội",
+                List.of(new OrderService.CreateLine(11L, 2))))
+                .isInstanceOf(BusinessConflictException.class)
+                .hasMessageContaining("Không đủ tồn kho");
+
         verifyNoInteractions(orders, inventory);
     }
 
@@ -110,8 +127,10 @@ class OrderServiceTest {
     }
 
     @Test
-    void productsLockedInAscendingOrder() {
-        when(products.findAllByIdsForUpdate(List.of(5L, 11L))).thenReturn(List.of(mouse, keyboard));
+    void stockDecreasedInAscendingProductIdOrder() {
+        when(products.findAllByIds(List.of(5L, 11L))).thenReturn(List.of(mouse, keyboard));
+        when(products.decreaseStock(5L, 2)).thenReturn(OptionalInt.of(8));
+        when(products.decreaseStock(11L, 1)).thenReturn(OptionalInt.of(4));
         when(orders.save(any(Order.class))).thenAnswer(call -> call.getArgument(0));
 
         service.create("customer@example.com", "Người nhận",
@@ -119,7 +138,9 @@ class OrderServiceTest {
                 List.of(new OrderService.CreateLine(11L, 1),
                         new OrderService.CreateLine(5L, 2)));
 
-        verify(products).findAllByIdsForUpdate(List.of(5L, 11L));
+        var inOrder = inOrder(products);
+        inOrder.verify(products).decreaseStock(5L, 2);
+        inOrder.verify(products).decreaseStock(11L, 1);
     }
 
     @Test

@@ -40,9 +40,9 @@ public class OrderService {
         return transactionRunner.execute(() -> {
             User user = activeUser(customerEmail);
             List<Long> ids = uniqueIds.stream().sorted().toList();
-            Map<Long, Product> products = productRepository.findAllByIdsForUpdate(ids).stream()
+            // Plain read: the stock check here is only a fast fail, decreaseStock below is the real guard.
+            Map<Long, Product> products = productRepository.findAllByIds(ids).stream()
                     .collect(Collectors.toMap(Product::id, Function.identity()));
-            List<Product> changedProducts = new ArrayList<>();
             List<OrderItem> items = new ArrayList<>();
 
             for (CreateLine line : lines) {
@@ -54,7 +54,6 @@ public class OrderService {
                 if (product.stockQuantity() < line.quantity()) {
                     throw new BusinessConflictException("Không đủ tồn kho cho sản phẩm: " + product.name());
                 }
-                changedProducts.add(product.withStock(product.stockQuantity() - line.quantity()));
                 items.add(new OrderItem(null, product.id(), product.name(), product.price(),
                         line.quantity(), product.price().multiply(BigDecimal.valueOf(line.quantity()))));
             }
@@ -62,14 +61,20 @@ public class OrderService {
             BigDecimal total = items.stream().map(OrderItem::lineTotal).reduce(BigDecimal.ZERO, BigDecimal::add);
             if (total.compareTo(new BigDecimal("9999999999999.99")) > 0)
                 throw new BusinessConflictException("Tổng tiền vượt giới hạn đơn hàng");
-            productRepository.saveAll(changedProducts);
+            // Ascending id order so two multi-product orders cannot deadlock on each other's rows.
+            Map<Long, Integer> stockAfter = new HashMap<>();
+            for (CreateLine line : lines.stream().sorted(Comparator.comparing(CreateLine::productId)).toList()) {
+                Product product = products.get(line.productId());
+                int after = productRepository.decreaseStock(product.id(), line.quantity()).orElseThrow(() ->
+                        new BusinessConflictException("Không đủ tồn kho cho sản phẩm: " + product.name()));
+                stockAfter.put(product.id(), after);
+            }
             Order saved = orderRepository.save(new Order(null, newOrderCode(), user.id(), recipientName,
                     recipientPhone, shippingAddress, OrderStatus.PENDING, null, null, null, items));
             for (CreateLine line : lines) {
-                Product product = products.get(line.productId());
-                inventory.record(product.id(), saved.id(), "SALE", -line.quantity(), product.stockQuantity(),
-                        product.stockQuantity() - line.quantity(), saved.orderCode() + "-SALE-" + product.id(),
-                        "Đặt hàng", user.id());
+                int after = stockAfter.get(line.productId());
+                inventory.record(line.productId(), saved.id(), "SALE", -line.quantity(), after + line.quantity(),
+                        after, saved.orderCode() + "-SALE-" + line.productId(), "Đặt hàng", user.id());
             }
             return saved;
         });
