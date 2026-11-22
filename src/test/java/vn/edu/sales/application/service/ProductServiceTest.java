@@ -327,6 +327,11 @@ class ProductServiceTest {
         }
 
         @Override
+        public java.util.OptionalInt increaseStock(Long productId, int quantity) {
+            throw new UnsupportedOperationException("ProductService does not restore sold stock");
+        }
+
+        @Override
         public List<Product> saveAll(List<Product> productsToSave) {
             return productsToSave.stream().map(this::save).toList();
         }

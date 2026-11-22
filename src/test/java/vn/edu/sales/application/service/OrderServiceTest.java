@@ -156,12 +156,14 @@ class OrderServiceTest {
         Order cancelled = pending.withStatus(OrderStatus.CANCELLED);
         when(orders.findByIdForUpdate(21L)).thenReturn(Optional.of(pending), Optional.of(cancelled));
         when(orders.save(any(Order.class))).thenAnswer(call -> call.getArgument(0));
-        when(products.findAllByIdsForUpdate(List.of(11L))).thenReturn(List.of(keyboard));
+        when(products.increaseStock(11L, 2)).thenReturn(OptionalInt.of(7));
 
         assertThat(service.changeStatus("admin@example.com", 21L, OrderStatus.CANCELLED).status()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(service.changeStatus("admin@example.com", 21L, OrderStatus.CANCELLED).status()).isEqualTo(OrderStatus.CANCELLED);
 
-        verify(products, times(1)).saveAll(argThat(list -> list.getFirst().stockQuantity() == 7));
+        verify(products, times(1)).increaseStock(11L, 2);
+        verify(products, never()).findAllByIdsForUpdate(anyList());
+        verify(products, never()).saveAll(anyList());
         verify(inventory, times(1)).record(eq(11L), eq(21L), eq("SALE_REVERSAL"), eq(2),
                 eq(5), eq(7), anyString(), anyString(), eq(4L));
         verify(orders, times(1)).save(any(Order.class));
@@ -172,7 +174,7 @@ class OrderServiceTest {
         Order pending = order(OrderStatus.PENDING);
         when(orders.findByIdForUpdate(21L)).thenReturn(Optional.of(pending));
         when(orders.save(any(Order.class))).thenAnswer(call -> call.getArgument(0));
-        when(products.findAllByIdsForUpdate(List.of(11L))).thenReturn(List.of(keyboard));
+        when(products.increaseStock(11L, 2)).thenReturn(OptionalInt.of(7));
 
         assertThat(service.cancelMine("customer@example.com", 21L).status())
                 .isEqualTo(OrderStatus.CANCELLED);
@@ -186,7 +188,7 @@ class OrderServiceTest {
         assertThatThrownBy(() -> service.changeStatus("admin@example.com", 21L, OrderStatus.COMPLETED))
                 .isInstanceOf(BusinessConflictException.class);
 
-        verify(products, never()).saveAll(anyList());
+        verify(products, never()).increaseStock(anyLong(), anyInt());
         verify(orders, never()).save(any(Order.class));
     }
 
@@ -195,7 +197,7 @@ class OrderServiceTest {
         Order confirmed = order(OrderStatus.CONFIRMED);
         when(orders.findByIdForUpdate(21L)).thenReturn(Optional.of(confirmed));
         when(orders.save(any(Order.class))).thenAnswer(call -> call.getArgument(0));
-        when(products.findAllByIdsForUpdate(List.of(11L))).thenReturn(List.of(keyboard));
+        when(products.increaseStock(11L, 2)).thenReturn(OptionalInt.of(7));
 
         Order result = service.changeStatus("admin@example.com", 21L, OrderStatus.CANCELLED);
         assertThat(result.status()).isEqualTo(OrderStatus.CANCELLED);
@@ -211,7 +213,7 @@ class OrderServiceTest {
         assertThatThrownBy(() -> service.changeStatus("admin@example.com", 21L, OrderStatus.CANCELLED))
                 .isInstanceOf(BusinessConflictException.class);
 
-        verify(products, never()).saveAll(anyList());
+        verify(products, never()).increaseStock(anyLong(), anyInt());
         verify(orders, never()).save(any(Order.class));
     }
 
@@ -243,11 +245,10 @@ class OrderServiceTest {
     @Test
     void cancellationStockOverflowLeavesOrderAndInventoryUnchanged() {
         when(orders.findByIdForUpdate(21L)).thenReturn(Optional.of(order(OrderStatus.PENDING)));
-        when(products.findAllByIdsForUpdate(List.of(11L)))
-                .thenReturn(List.of(keyboard.withStock(Integer.MAX_VALUE)));
+        when(products.increaseStock(11L, 2)).thenReturn(OptionalInt.empty());
         assertThatThrownBy(() -> service.cancelMine("customer@example.com", 21L))
-                .isInstanceOf(BusinessConflictException.class);
-        verify(products, never()).saveAll(anyList());
+                .isInstanceOf(BusinessConflictException.class)
+                .hasMessageContaining("vượt giới hạn");
         verify(orders, never()).save(any());
         verifyNoInteractions(inventory);
     }

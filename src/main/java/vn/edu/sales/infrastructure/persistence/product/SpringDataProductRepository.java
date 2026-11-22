@@ -33,6 +33,12 @@ public interface SpringDataProductRepository extends JpaRepository<ProductJpaEnt
             nativeQuery = true)
     int decreaseStock(@Param("id") Long id, @Param("quantity") int quantity);
 
+    @Modifying
+    @Query(value = "update products set stock_quantity = stock_quantity + :quantity, version = version + 1, " +
+            "updated_at = current_timestamp where id = :id and stock_quantity <= 2147483647 - :quantity",
+            nativeQuery = true)
+    int increaseStock(@Param("id") Long id, @Param("quantity") int quantity);
+
     @Query(value = "select stock_quantity from products where id = :id", nativeQuery = true)
     int stockQuantityOf(@Param("id") Long id);
 }

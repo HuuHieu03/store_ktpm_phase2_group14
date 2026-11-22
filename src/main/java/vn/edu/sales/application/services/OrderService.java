@@ -165,24 +165,15 @@ public class OrderService {
         };
         if (!allowed) throw new BusinessConflictException("Không thể chuyển trạng thái từ " + current + " sang " + next);
     }
+    // Same pattern as create: atomic UPDATE per product in ascending id order, movement row right after.
+    // The order row is already locked by findByIdForUpdate, so one order is never restored twice.
     private void restoreStock(Order order, Long actorUserId) {
-        List<Long> ids = order.items().stream().map(OrderItem::productId).sorted().toList();
-        Map<Long, Product> products = productRepository.findAllByIdsForUpdate(ids).stream()
-                .collect(Collectors.toMap(Product::id, Function.identity()));
-        List<Product> changed = order.items().stream().map(item -> {
-            Product product = products.get(item.productId());
-            if (product == null) throw new BusinessConflictException("Không thể hoàn kho sản phẩm: " + item.productId());
-            long restored = (long) product.stockQuantity() + item.quantity();
-            if (restored > Integer.MAX_VALUE)
-                throw new BusinessConflictException("Tồn kho sau hoàn trả vượt giới hạn");
-            return product.withStock((int) restored);
-        }).toList();
-        productRepository.saveAll(changed);
-        for (OrderItem item : order.items()) {
-            Product before = products.get(item.productId());
-            inventory.record(before.id(), order.id(), "SALE_REVERSAL", item.quantity(), before.stockQuantity(),
-                    before.stockQuantity() + item.quantity(), order.orderCode() + "-REVERSAL-" + before.id(),
-                    "Hủy đơn hàng", actorUserId);
+        for (OrderItem item : order.items().stream().sorted(Comparator.comparing(OrderItem::productId)).toList()) {
+            int after = productRepository.increaseStock(item.productId(), item.quantity()).orElseThrow(() ->
+                    new BusinessConflictException("Không thể hoàn kho sản phẩm: " + item.productId()
+                            + " (không tồn tại hoặc tồn kho sau hoàn trả vượt giới hạn)"));
+            inventory.record(item.productId(), order.id(), "SALE_REVERSAL", item.quantity(), after - item.quantity(),
+                    after, order.orderCode() + "-REVERSAL-" + item.productId(), "Hủy đơn hàng", actorUserId);
         }
     }
 

@@ -22,6 +22,9 @@ public interface ProductRepository {
     /** Atomically subtracts quantity from an ACTIVE product; returns the new stock, or empty if stock is short. */
     OptionalInt decreaseStock(Long productId, int quantity);
 
+    /** Atomically adds quantity back to a product in any status; returns the new stock, or empty if it would overflow. */
+    OptionalInt increaseStock(Long productId, int quantity);
+
     List<Product> saveAll(List<Product> products);
 
     boolean existsBySku(String sku);
