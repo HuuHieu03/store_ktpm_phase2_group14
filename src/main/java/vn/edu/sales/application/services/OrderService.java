@@ -61,18 +61,24 @@ public class OrderService {
             BigDecimal total = items.stream().map(OrderItem::lineTotal).reduce(BigDecimal.ZERO, BigDecimal::add);
             if (total.compareTo(new BigDecimal("9999999999999.99")) > 0)
                 throw new BusinessConflictException("Tổng tiền vượt giới hạn đơn hàng");
-            // Write the order before touching stock: the product row lock from decreaseStock is held until
-            // commit, so it should cover only the stock update and its movement row. A failed decrease rolls
-            // the order back with the rest of the transaction.
-            Order saved = orderRepository.save(new Order(null, newOrderCode(), user.id(), recipientName,
-                    recipientPhone, shippingAddress, OrderStatus.PENDING, null, null, null, items));
+            // Decrease stock BEFORE inserting order_items. On InnoDB the order_items -> products foreign key
+            // check takes a shared lock on the product row; if every buyer inserts first and then tries to
+            // upgrade to the UPDATE's exclusive lock, they deadlock on a hot SKU (Kaggle run 20261122T090451Z:
+            // 82-88% of orders rolled back). Taking the exclusive lock first makes the FK check free.
             // Ascending id order so two multi-product orders cannot deadlock on each other's rows.
+            Map<Long, Integer> stockAfter = new HashMap<>();
             for (CreateLine line : lines.stream().sorted(Comparator.comparing(CreateLine::productId)).toList()) {
                 Product product = products.get(line.productId());
                 int after = productRepository.decreaseStock(product.id(), line.quantity()).orElseThrow(() ->
                         new BusinessConflictException("Không đủ tồn kho cho sản phẩm: " + product.name()));
-                inventory.record(product.id(), saved.id(), "SALE", -line.quantity(), after + line.quantity(),
-                        after, saved.orderCode() + "-SALE-" + product.id(), "Đặt hàng", user.id());
+                stockAfter.put(product.id(), after);
+            }
+            Order saved = orderRepository.save(new Order(null, newOrderCode(), user.id(), recipientName,
+                    recipientPhone, shippingAddress, OrderStatus.PENDING, null, null, null, items));
+            for (CreateLine line : lines) {
+                int after = stockAfter.get(line.productId());
+                inventory.record(line.productId(), saved.id(), "SALE", -line.quantity(), after + line.quantity(),
+                        after, saved.orderCode() + "-SALE-" + line.productId(), "Đặt hàng", user.id());
             }
             return saved;
         });
