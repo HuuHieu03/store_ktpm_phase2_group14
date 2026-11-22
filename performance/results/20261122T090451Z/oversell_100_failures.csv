@@ -1,0 +1,3 @@
+Method,Name,Error,Occurrences
+POST,POST /api/orders (hotspot),CatchResponseError('lock_conflict'),2256
+POST,POST /api/orders (hotspot),CatchResponseError('out_of_stock'),26826
