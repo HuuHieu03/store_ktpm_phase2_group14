@@ -88,17 +88,19 @@ class OrderServiceTest {
     }
 
     @Test
-    void stockTakenByConcurrentBuyerRejectsOrderWithoutSavingIt() {
+    void stockTakenByConcurrentBuyerFailsBeforeRecordingInventory() {
         when(products.findAllByIds(List.of(11L))).thenReturn(List.of(keyboard));
         when(products.decreaseStock(11L, 2)).thenReturn(OptionalInt.empty());
+        when(orders.save(any(Order.class))).thenAnswer(call -> call.getArgument(0));
 
+        // The order row is already written here; the exception makes the transaction roll it back.
         assertThatThrownBy(() -> service.create("customer@example.com", "Người nhận",
                 "0901234567", "Hà Nội",
                 List.of(new OrderService.CreateLine(11L, 2))))
                 .isInstanceOf(BusinessConflictException.class)
                 .hasMessageContaining("Không đủ tồn kho");
 
-        verifyNoInteractions(orders, inventory);
+        verifyNoInteractions(inventory);
     }
 
     @Test
@@ -127,7 +129,7 @@ class OrderServiceTest {
     }
 
     @Test
-    void stockDecreasedInAscendingProductIdOrder() {
+    void orderWrittenBeforeStockIsDecreasedInAscendingProductIdOrder() {
         when(products.findAllByIds(List.of(5L, 11L))).thenReturn(List.of(mouse, keyboard));
         when(products.decreaseStock(5L, 2)).thenReturn(OptionalInt.of(8));
         when(products.decreaseStock(11L, 1)).thenReturn(OptionalInt.of(4));
@@ -138,9 +140,14 @@ class OrderServiceTest {
                 List.of(new OrderService.CreateLine(11L, 1),
                         new OrderService.CreateLine(5L, 2)));
 
-        var inOrder = inOrder(products);
+        var inOrder = inOrder(orders, products, inventory);
+        inOrder.verify(orders).save(any(Order.class));
         inOrder.verify(products).decreaseStock(5L, 2);
+        inOrder.verify(inventory).record(eq(5L), any(), eq("SALE"), eq(-2), eq(10), eq(8),
+                anyString(), anyString(), eq(3L));
         inOrder.verify(products).decreaseStock(11L, 1);
+        inOrder.verify(inventory).record(eq(11L), any(), eq("SALE"), eq(-1), eq(5), eq(4),
+                anyString(), anyString(), eq(3L));
     }
 
     @Test
