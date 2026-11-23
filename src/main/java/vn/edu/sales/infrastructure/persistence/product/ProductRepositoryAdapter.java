@@ -14,6 +14,7 @@ import vn.edu.sales.domain.model.ProductStatus;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -76,8 +77,30 @@ public class ProductRepositoryAdapter implements ProductRepository {
     }
 
     @Override
+    public List<Product> findAllByIds(List<Long> ids) {
+        return repository.findAllById(ids).stream().map(this::toDomain).toList();
+    }
+
+    @Override
     public List<Product> findAllByIdsForUpdate(List<Long> ids) {
         return repository.findAllByIdsForUpdate(ids).stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public OptionalInt decreaseStock(Long productId, int quantity) {
+        return stockAfter(repository.decreaseStock(productId, quantity), productId);
+    }
+
+    @Override
+    public OptionalInt increaseStock(Long productId, int quantity) {
+        return stockAfter(repository.increaseStock(productId, quantity), productId);
+    }
+
+    private OptionalInt stockAfter(int updatedRows, Long productId) {
+        if (updatedRows == 0) return OptionalInt.empty();
+        invalidateAfterCommit();
+        // Same transaction, so this reads our own update even while other buyers wait on the row.
+        return OptionalInt.of(repository.stockQuantityOf(productId));
     }
 
     @Override

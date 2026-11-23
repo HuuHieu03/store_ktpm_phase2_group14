@@ -1,0 +1,62 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.5.0)
+
+2026-11-21T15:39:48.722Z  INFO 2267 --- [single-store-service] [           main] vn.edu.sales.SalesServiceApplication     : Starting SalesServiceApplication v0.0.1-SNAPSHOT using Java 21.0.13.1 with PID 2267 (/kaggle/working/store_ktpm/target/single-store-service-0.0.1-SNAPSHOT.jar started by root in /kaggle/working/store_ktpm)
+2026-11-21T15:39:48.727Z  INFO 2267 --- [single-store-service] [           main] vn.edu.sales.SalesServiceApplication     : The following 1 profile is active: "mysql"
+2026-11-21T15:39:50.615Z  INFO 2267 --- [single-store-service] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-21T15:39:50.724Z  INFO 2267 --- [single-store-service] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 91 ms. Found 3 JPA repository interfaces.
+2026-11-21T15:39:51.870Z  INFO 2267 --- [single-store-service] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 18080 (http)
+2026-11-21T15:39:51.896Z  INFO 2267 --- [single-store-service] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-11-21T15:39:51.897Z  INFO 2267 --- [single-store-service] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.41]
+2026-11-21T15:39:51.948Z  INFO 2267 --- [single-store-service] [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-11-21T15:39:51.951Z  INFO 2267 --- [single-store-service] [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 3151 ms
+2026-11-21T15:39:52.625Z  INFO 2267 --- [single-store-service] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-11-21T15:39:53.021Z  INFO 2267 --- [single-store-service] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@33a47707
+2026-11-21T15:39:53.024Z  INFO 2267 --- [single-store-service] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-11-21T15:39:53.123Z  INFO 2267 --- [single-store-service] [           main] org.flywaydb.core.FlywayExecutor         : Database: jdbc:mysql://127.0.0.1:3306/single_store_team?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true (MySQL 8.0)
+2026-11-21T15:39:53.330Z  INFO 2267 --- [single-store-service] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Schema history table `single_store_team`.`flyway_schema_history` does not exist yet
+2026-11-21T15:39:53.336Z  INFO 2267 --- [single-store-service] [           main] o.f.core.internal.command.DbValidate     : Successfully validated 2 migrations (execution time 00:00.036s)
+2026-11-21T15:39:53.368Z  INFO 2267 --- [single-store-service] [           main] o.f.c.i.s.JdbcTableSchemaHistory         : Creating Schema History table `single_store_team`.`flyway_schema_history` ...
+2026-11-21T15:39:53.627Z  INFO 2267 --- [single-store-service] [           main] o.f.core.internal.command.DbMigrate      : Current version of schema `single_store_team`: << Empty Schema >>
+2026-11-21T15:39:53.657Z  INFO 2267 --- [single-store-service] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `single_store_team` to version "1 - initial schema"
+2026-11-21T15:39:54.920Z  INFO 2267 --- [single-store-service] [           main] o.f.core.internal.command.DbMigrate      : Migrating schema `single_store_team` to version "2 - demo products"
+2026-11-21T15:39:54.971Z  INFO 2267 --- [single-store-service] [           main] o.f.core.internal.command.DbMigrate      : Successfully applied 2 migrations to schema `single_store_team`, now at version v2 (execution time 00:01.211s)
+2026-11-21T15:39:55.118Z  INFO 2267 --- [single-store-service] [           main] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-11-21T15:39:55.237Z  INFO 2267 --- [single-store-service] [           main] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.6.15.Final
+2026-11-21T15:39:55.303Z  INFO 2267 --- [single-store-service] [           main] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+2026-11-21T15:39:55.811Z  INFO 2267 --- [single-store-service] [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-11-21T15:39:55.964Z  INFO 2267 --- [single-store-service] [           main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [Connecting through datasource 'HikariDataSource (HikariPool-1)']
+	Database driver: undefined/unknown
+	Database version: 8.0.46
+	Autocommit mode: undefined/unknown
+	Isolation level: undefined/unknown
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-11-21T15:39:57.576Z  INFO 2267 --- [single-store-service] [           main] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-11-21T15:39:57.625Z  INFO 2267 --- [single-store-service] [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-11-21T15:39:58.168Z  INFO 2267 --- [single-store-service] [           main] o.s.d.j.r.query.QueryEnhancerFactory     : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-11-21T15:40:00.734Z  WARN 2267 --- [single-store-service] [           main] .s.s.UserDetailsServiceAutoConfiguration : 
+
+Using generated security password: [REDACTED_DEVELOPMENT_PASSWORD]
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-11-21T15:40:00.745Z  INFO 2267 --- [single-store-service] [           main] r$InitializeUserDetailsManagerConfigurer : Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-11-21T15:40:01.709Z  INFO 2267 --- [single-store-service] [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 18080 (http) with context path '/'
+2026-11-21T15:40:01.733Z  INFO 2267 --- [single-store-service] [           main] vn.edu.sales.SalesServiceApplication     : Started SalesServiceApplication in 13.861 seconds (process running for 14.671)
+2026-11-21T15:40:03.176Z  INFO 2267 --- [single-store-service] [io-18080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-11-21T15:40:03.176Z  INFO 2267 --- [single-store-service] [io-18080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-11-21T15:40:03.179Z  INFO 2267 --- [single-store-service] [io-18080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 3 ms
+2026-11-21T15:47:28.409Z  INFO 2267 --- [single-store-service] [ionShutdownHook] o.s.b.w.e.tomcat.GracefulShutdown        : Commencing graceful shutdown. Waiting for active requests to complete
+2026-11-21T15:47:28.414Z  INFO 2267 --- [single-store-service] [tomcat-shutdown] o.s.b.w.e.tomcat.GracefulShutdown        : Graceful shutdown complete
+2026-11-21T15:47:28.455Z  INFO 2267 --- [single-store-service] [ionShutdownHook] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-11-21T15:47:28.460Z  INFO 2267 --- [single-store-service] [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-11-21T15:47:28.468Z  INFO 2267 --- [single-store-service] [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.

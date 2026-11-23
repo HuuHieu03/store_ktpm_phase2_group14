@@ -40,9 +40,9 @@ public class OrderService {
         return transactionRunner.execute(() -> {
             User user = activeUser(customerEmail);
             List<Long> ids = uniqueIds.stream().sorted().toList();
-            Map<Long, Product> products = productRepository.findAllByIdsForUpdate(ids).stream()
+            // Plain read: the stock check here is only a fast fail, decreaseStock below is the real guard.
+            Map<Long, Product> products = productRepository.findAllByIds(ids).stream()
                     .collect(Collectors.toMap(Product::id, Function.identity()));
-            List<Product> changedProducts = new ArrayList<>();
             List<OrderItem> items = new ArrayList<>();
 
             for (CreateLine line : lines) {
@@ -54,7 +54,6 @@ public class OrderService {
                 if (product.stockQuantity() < line.quantity()) {
                     throw new BusinessConflictException("Không đủ tồn kho cho sản phẩm: " + product.name());
                 }
-                changedProducts.add(product.withStock(product.stockQuantity() - line.quantity()));
                 items.add(new OrderItem(null, product.id(), product.name(), product.price(),
                         line.quantity(), product.price().multiply(BigDecimal.valueOf(line.quantity()))));
             }
@@ -62,14 +61,24 @@ public class OrderService {
             BigDecimal total = items.stream().map(OrderItem::lineTotal).reduce(BigDecimal.ZERO, BigDecimal::add);
             if (total.compareTo(new BigDecimal("9999999999999.99")) > 0)
                 throw new BusinessConflictException("Tổng tiền vượt giới hạn đơn hàng");
-            productRepository.saveAll(changedProducts);
+            // Decrease stock BEFORE inserting order_items. On InnoDB the order_items -> products foreign key
+            // check takes a shared lock on the product row; if every buyer inserts first and then tries to
+            // upgrade to the UPDATE's exclusive lock, they deadlock on a hot SKU (Kaggle run 20261122T090451Z:
+            // 82-88% of orders rolled back). Taking the exclusive lock first makes the FK check free.
+            // Ascending id order so two multi-product orders cannot deadlock on each other's rows.
+            Map<Long, Integer> stockAfter = new HashMap<>();
+            for (CreateLine line : lines.stream().sorted(Comparator.comparing(CreateLine::productId)).toList()) {
+                Product product = products.get(line.productId());
+                int after = productRepository.decreaseStock(product.id(), line.quantity()).orElseThrow(() ->
+                        new BusinessConflictException("Không đủ tồn kho cho sản phẩm: " + product.name()));
+                stockAfter.put(product.id(), after);
+            }
             Order saved = orderRepository.save(new Order(null, newOrderCode(), user.id(), recipientName,
                     recipientPhone, shippingAddress, OrderStatus.PENDING, null, null, null, items));
             for (CreateLine line : lines) {
-                Product product = products.get(line.productId());
-                inventory.record(product.id(), saved.id(), "SALE", -line.quantity(), product.stockQuantity(),
-                        product.stockQuantity() - line.quantity(), saved.orderCode() + "-SALE-" + product.id(),
-                        "Đặt hàng", user.id());
+                int after = stockAfter.get(line.productId());
+                inventory.record(line.productId(), saved.id(), "SALE", -line.quantity(), after + line.quantity(),
+                        after, saved.orderCode() + "-SALE-" + line.productId(), "Đặt hàng", user.id());
             }
             return saved;
         });
@@ -162,24 +171,15 @@ public class OrderService {
         };
         if (!allowed) throw new BusinessConflictException("Không thể chuyển trạng thái từ " + current + " sang " + next);
     }
+    // Same pattern as create: atomic UPDATE per product in ascending id order, movement row right after.
+    // The order row is already locked by findByIdForUpdate, so one order is never restored twice.
     private void restoreStock(Order order, Long actorUserId) {
-        List<Long> ids = order.items().stream().map(OrderItem::productId).sorted().toList();
-        Map<Long, Product> products = productRepository.findAllByIdsForUpdate(ids).stream()
-                .collect(Collectors.toMap(Product::id, Function.identity()));
-        List<Product> changed = order.items().stream().map(item -> {
-            Product product = products.get(item.productId());
-            if (product == null) throw new BusinessConflictException("Không thể hoàn kho sản phẩm: " + item.productId());
-            long restored = (long) product.stockQuantity() + item.quantity();
-            if (restored > Integer.MAX_VALUE)
-                throw new BusinessConflictException("Tồn kho sau hoàn trả vượt giới hạn");
-            return product.withStock((int) restored);
-        }).toList();
-        productRepository.saveAll(changed);
-        for (OrderItem item : order.items()) {
-            Product before = products.get(item.productId());
-            inventory.record(before.id(), order.id(), "SALE_REVERSAL", item.quantity(), before.stockQuantity(),
-                    before.stockQuantity() + item.quantity(), order.orderCode() + "-REVERSAL-" + before.id(),
-                    "Hủy đơn hàng", actorUserId);
+        for (OrderItem item : order.items().stream().sorted(Comparator.comparing(OrderItem::productId)).toList()) {
+            int after = productRepository.increaseStock(item.productId(), item.quantity()).orElseThrow(() ->
+                    new BusinessConflictException("Không thể hoàn kho sản phẩm: " + item.productId()
+                            + " (không tồn tại hoặc tồn kho sau hoàn trả vượt giới hạn)"));
+            inventory.record(item.productId(), order.id(), "SALE_REVERSAL", item.quantity(), after - item.quantity(),
+                    after, order.orderCode() + "-REVERSAL-" + item.productId(), "Hủy đơn hàng", actorUserId);
         }
     }
 
