@@ -1,4 +1,4 @@
-package vn.edu.sales.application.service;
+package vn.edu.sales.application.services;
 
 import vn.edu.sales.application.port.out.ProductRepository;
 import vn.edu.sales.application.port.out.InventoryStore;
