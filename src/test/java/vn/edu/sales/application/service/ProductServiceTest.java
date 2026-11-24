@@ -1,6 +1,7 @@
 package vn.edu.sales.application.service;
 
 import org.junit.jupiter.api.Test;
+import vn.edu.sales.application.services.ProductService;
 import vn.edu.sales.application.port.out.ProductRepository;
 import vn.edu.sales.application.port.out.InventoryStore;
 import vn.edu.sales.application.port.out.TransactionRunner;

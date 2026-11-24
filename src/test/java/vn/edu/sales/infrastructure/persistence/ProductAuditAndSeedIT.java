@@ -10,7 +10,7 @@ import org.springframework.test.context.TestExecutionListeners;
 import org.springframework.test.context.support.DependencyInjectionTestExecutionListener;
 import vn.edu.sales.application.port.out.InventoryStore;
 import vn.edu.sales.application.port.out.UserRepository;
-import vn.edu.sales.application.service.ProductService;
+import vn.edu.sales.application.services.ProductService;
 import vn.edu.sales.domain.model.Product;
 import vn.edu.sales.domain.model.ProductStatus;
 import vn.edu.sales.domain.model.Role;
