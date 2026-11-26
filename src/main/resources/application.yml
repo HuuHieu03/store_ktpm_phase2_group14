@@ -37,7 +37,7 @@ app:
   seed:
     enabled: true
   auth-bulkhead:
-    max-concurrent: ${AUTH_BULKHEAD_MAX_CONCURRENT:2}
+    max-concurrent: ${AUTH_BULKHEAD_MAX_CONCURRENT:3}
     acquire-timeout: ${AUTH_BULKHEAD_ACQUIRE_TIMEOUT:2s}
 
 springdoc:

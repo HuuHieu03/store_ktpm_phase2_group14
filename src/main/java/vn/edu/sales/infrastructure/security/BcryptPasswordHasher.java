@@ -25,13 +25,13 @@ public class BcryptPasswordHasher implements PasswordHasher {
     private final AtomicLong totalWaitNanos = new AtomicLong();
 
     public BcryptPasswordHasher(PasswordEncoder passwordEncoder) {
-        this(passwordEncoder, 2, Duration.ofSeconds(2));
+        this(passwordEncoder, 3, Duration.ofSeconds(2));
     }
 
     @Autowired
     public BcryptPasswordHasher(
             PasswordEncoder passwordEncoder,
-            @Value("${app.auth-bulkhead.max-concurrent:2}") int maxConcurrent,
+            @Value("${app.auth-bulkhead.max-concurrent:3}") int maxConcurrent,
             @Value("${app.auth-bulkhead.acquire-timeout:2s}") Duration acquireTimeout) {
         if (maxConcurrent < 1) {
             throw new IllegalArgumentException("app.auth-bulkhead.max-concurrent must be >= 1");
