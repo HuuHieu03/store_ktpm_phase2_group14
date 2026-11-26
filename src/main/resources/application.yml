@@ -36,6 +36,9 @@ app:
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
   seed:
     enabled: true
+  auth-bulkhead:
+    max-concurrent: ${AUTH_BULKHEAD_MAX_CONCURRENT:3}
+    acquire-timeout: ${AUTH_BULKHEAD_ACQUIRE_TIMEOUT:2s}
 
 springdoc:
   swagger-ui:

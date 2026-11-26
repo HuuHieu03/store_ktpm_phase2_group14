@@ -1,0 +1,145 @@
+{
+  "started_at_utc": "2026-11-26T18:14:58.456637+00:00",
+  "environment": "Kaggle CPU Notebook",
+  "scenario": "stress",
+  "git_commit": "88c1262f15012af1adda8b7b2cd4ac29f47527eb",
+  "cpu_count": 4,
+  "memory_gb": 31.35,
+  "java_version": "openjdk version \"21.0.13.1\" 2026-11-17",
+  "mysql_version": "8.0.46-0ubuntu0.24.04.5",
+  "locust_version": "locust 2.32.1 from /usr/local/lib/python3.13/dist-packages/locust (Python 3.13.18)",
+  "phases": {
+    "smoke": {
+      "users": 5,
+      "duration_seconds": 60,
+      "exit_code": 0,
+      "innodb": {
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 0
+      }
+    },
+    "baseline": {
+      "users": 10,
+      "duration_seconds": 60,
+      "exit_code": 0,
+      "innodb": {
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 0
+      }
+    },
+    "main": {
+      "users": 30,
+      "duration_seconds": 90,
+      "exit_code": 0,
+      "innodb": {
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 0
+      }
+    },
+    "high": {
+      "users": 60,
+      "duration_seconds": 90,
+      "exit_code": 0,
+      "innodb": {
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 0
+      }
+    },
+    "stress_100": {
+      "users": 100,
+      "duration_seconds": 90,
+      "exit_code": 0,
+      "innodb": {
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 0
+      }
+    },
+    "stress_150": {
+      "users": 150,
+      "duration_seconds": 90,
+      "exit_code": 0,
+      "innodb": {
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 0
+      }
+    },
+    "stress_200": {
+      "users": 200,
+      "duration_seconds": 90,
+      "exit_code": 0,
+      "innodb": {
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 0
+      }
+    },
+    "stress_250": {
+      "users": 250,
+      "duration_seconds": 90,
+      "exit_code": 0,
+      "innodb": {
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 0
+      }
+    },
+    "stress_300": {
+      "users": 300,
+      "duration_seconds": 90,
+      "exit_code": 0,
+      "innodb": {
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 0
+      }
+    },
+    "stress_400": {
+      "users": 400,
+      "duration_seconds": 90,
+      "exit_code": 0,
+      "innodb": {
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 0
+      }
+    },
+    "stress_500": {
+      "users": 500,
+      "duration_seconds": 90,
+      "exit_code": 0,
+      "innodb": {
+        "Innodb_row_lock_time": 0,
+        "Innodb_row_lock_waits": 0,
+        "lock_deadlocks": 0,
+        "lock_timeouts": 0,
+        "Innodb_row_lock_time_max_cumulative": 0
+      }
+    }
+  }
+}

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import vn.edu.sales.domain.exception.BusinessConflictException;
 import vn.edu.sales.domain.exception.InvalidCredentialsException;
 import vn.edu.sales.domain.exception.ResourceNotFoundException;
+import vn.edu.sales.domain.exception.ServiceBusyException;
 
 // Test-only, outside vn.edu.sales so SpringBootApplication will not component-scan it.
 // Only ApiExceptionHandlerStandaloneTest registers this fixture explicitly.
@@ -33,6 +34,7 @@ public class ApiErrorProbeController {
             case "transaction-system" -> new TransactionSystemException(INTERNAL);
             case "pessimistic" -> new CannotAcquireLockException(INTERNAL);
             case "optimistic" -> new ObjectOptimisticLockingFailureException("TestResource", 7L);
+            case "service-busy" -> new ServiceBusyException("Test service busy");
             default -> new IllegalArgumentException("Unknown test case");
         };
     }

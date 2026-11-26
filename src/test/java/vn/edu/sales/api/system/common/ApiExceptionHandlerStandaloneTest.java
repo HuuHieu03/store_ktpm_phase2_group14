@@ -54,11 +54,16 @@ class ApiExceptionHandlerStandaloneTest {
             "transaction-create,500,DATABASE_ERROR",
             "transaction-system,500,DATABASE_ERROR",
             "pessimistic,409,CONCURRENT_CHANGE",
-            "optimistic,409,CONCURRENT_CHANGE"
+            "optimistic,409,CONCURRENT_CHANGE",
+            "service-busy,503,SERVICE_BUSY"
     })
     void adviceMapsExceptionsWithoutLeakingInternalDatabaseDetails(String kind, int status, String code) throws Exception {
         String path = "/__test-errors/" + kind;
-        error(mvc.perform(get(path)).andReturn(), status, code, path);
+        var result = mvc.perform(get(path)).andReturn();
+        error(result, status, code, path);
+        if (status == 503) {
+            assertThat(result.getResponse().getHeader("Retry-After")).isEqualTo("1");
+        }
     }
 
     @Test
