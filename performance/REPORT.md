@@ -132,3 +132,47 @@ Thời gian chờ khoá trung bình mỗi lần ở hotspot_10: 194 ms (trước
 - **Trần ~48 đơn/s ≈ 21 ms giữ khoá mỗi đơn, nhiều khả năng phần lớn là chi phí commit (giả thuyết, chưa đo trực tiếp trên Kaggle).** Khoá dòng chỉ nhả *sau* commit, mà mỗi commit với `innodb_flush_log_at_trx_commit=1` và `sync_binlog=1` (mặc định) phải chờ ghi đĩa. Vì vậy các đơn cùng SKU xếp hàng qua từng lần fsync, khoá bằng `FOR UPDATE` hay `UPDATE` đều như nhau. Đo vi mô trên MySQL 8.4 bằng Docker (máy dev, không phải Kaggle), cùng chuỗi `UPDATE` dòng nóng + `INSERT` + `COMMIT` tuần tự: **8,9 ms/tx** khi có fsync mỗi commit, **0,16 ms/tx** khi tắt. Trên Kaggle chưa đo trực tiếp vì runner chưa ghi các biến này vào metadata.
 - CONC-01 vẫn giữ được các lợi ích về tính đúng: bỏ đọc–sửa–ghi trên entity, sửa lỗi huỷ đơn hai lần (`58af98f`), ghim thứ tự khoá tránh deadlock khoá ngoại.
 - Muốn vượt trần thì phải bỏ việc mỗi đơn chiếm riêng một lần commit trên cùng một dòng: chia tồn kho SKU nóng thành nhiều phần (nhiều commit chạy song song, InnoDB gộp được fsync), hoặc gom đơn theo lô qua hàng đợi (một commit cho nhiều đơn). Nới độ bền ghi đĩa chỉ nên dùng để kiểm chứng giả thuyết, không phải giải pháp cho dữ liệu đơn hàng. Phân tích đầy đủ trong [ADR CONC-01](../worklogs/2026-11-22_sonha_db_adr-atomic-stock-update.md).
+
+---
+
+## PHẦN 5: Tối ưu Đọc & Cô lập Tài nguyên CPU — Caffeine Cache + BCrypt Bulkhead (Phase 2)
+
+### 1. Mục tiêu & Chuỗi cải tiến thực nghiệm
+Dựa trên 3 điểm nghẽn đã định vị ở Phần 1 (BCrypt CPU-bound ở `/api/auth/login`, HikariCP, và thiếu tầng cache đọc sản phẩm), các cải tiến được triển khai tuần tự trên cùng kịch bản `stress` (5 → 500 users, Kaggle CPU 4 vCPU, MySQL 8.0.46) để đo tác động tách bạch từng bước:
+
+1. **Caffeine v1 (`3a93a38`):** Áp dụng cache-aside cho danh sách (`pages`) và chi tiết sản phẩm (`details`), TTL 30s, tối đa 1.000 mục, `invalidateAll()` sau commit khi ghi sản phẩm/tồn kho.
+2. **Caffeine v2 (`c152e56`):** Tối ưu chiến lược xóa cache — xóa đích danh `details` theo `productId`; tách `page-ttl: 10s` cho `pages` và chỉ xóa `pages` khi `save`/`saveAll` hoặc tồn kho chạm `0` / khôi phục từ `0`; bật `.recordStats()`.
+3. **Caffeine v2 + BCrypt Bulkhead `max=2` (`d48b83e`):** Bọc `BcryptPasswordHasher` (`hash`/`matches`) bằng `Semaphore(2, true)` với `acquire-timeout: 2s` (trả `503 SERVICE_BUSY` khi quá tải) nhằm cô lập BCrypt (`strength = 10`), chừa CPU cho luồng mua sắm.
+4. **Caffeine v2 + BCrypt Bulkhead `max=3` (`88c1262`, minh chứng [20261126T181318Z](results/20261126T181318Z/REPORT.md)):** Nâng `max-concurrent` lên `3` trên máy 4 vCPU để đáp ứng ~22 login/s của `stress_500` mà vẫn giữ 1 vCPU cho `/api/products` và `/api/orders`.
+
+### 2. Bảng đối chiếu tổng hợp 5 phiên bản
+
+| Phiên bản (Commit) | `stress_400` (RPS · p50 · p95 · Lỗi) | `stress_500` (RPS · p50 · p95 · p99 · Lỗi) | Tổng requests |
+| :--- | :--- | :--- | ---: |
+| **AS-IS** (`60864d7`, [20261116T145327Z](results/20261116T145327Z/REPORT.md)) | 184.55 · 29 ms · 240 ms · 0.0% | 207.04 · 180 ms · 730 ms · 1.100 ms · 0.0% | 82.048 |
+| **Caffeine v1** (`3a93a38`) | 187.03 · 14 ms · 230 ms · 0.0% | 219.23 · 100 ms · 500 ms · 820 ms · 0.0% | 83.479 |
+| **Caffeine v2** (`c152e56`) | 186.93 · 15 ms · 250 ms · 0.0% | 211.26 · 150 ms · 650 ms · 1.100 ms · 0.0% | 82.698 |
+| **Bulkhead `max=2`** (`d48b83e`) | 174.88 · 6.0 ms · 1.900 ms · 0.88% (138) | 218.37 · 7.0 ms · 2.000 ms · 2.100 ms · 2.24% (438) | 82.019 |
+| **Bulkhead `max=3`** (`88c1262`, [20261126T181318Z](results/20261126T181318Z/REPORT.md)) | **189.80 · 4.0 ms · 190 ms · 0.0%** | **226.26 · 6.0 ms · 1.100 ms · 1.400 ms · 0.0%** | **84.160** |
+
+### 3. Chi tiết hiệu năng từng Endpoint tại `stress_500` (AS-IS vs `88c1262`)
+
+| Endpoint | Tỷ trọng | Requests | RPS (`88c1262`) | `p50` (AS-IS → Mới) | `p95` (AS-IS → Mới) | `p99` (AS-IS → Mới) |
+| :--- | :---: | ---: | ---: | :---: | :---: | :---: |
+| `GET /api/products` | 60% | 12.167 | 135.37 | 150 ms → **4 ms** (-97.3%) | 550 ms → **27 ms** (-95.1%) | 810 ms → **83 ms** (-89.8%) |
+| `GET /api/products/{id}` | 15% | 3.109 | 34.59 | 150 ms → **4 ms** (-97.3%) | 530 ms → **29 ms** (-94.5%) | 740 ms → **84 ms** (-88.6%) |
+| `GET /api/orders/me` | 10% | 2.049 | 22.80 | 210 ms → **21 ms** (-90.0%) | 710 ms → **64 ms** (-91.0%) | 900 ms → **99 ms** (-89.0%) |
+| `POST /api/orders` | 5% | 1.056 | 11.75 | 210 ms → **34 ms** (-83.8%) | 650 ms → **77 ms** (-88.2%) | 840 ms → **120 ms** (-85.7%) |
+| `POST /api/auth/login` | 10% | 1.955 | 21.75 | 570 ms → **1.100 ms** | 1.200 ms → **1.500 ms** | 1.500 ms → **1.600 ms** |
+| **Toàn hệ thống** | **100%** | **20.336** | **226.26** | **180 ms → 6 ms (-96.7%)** | **730 ms → 1.100 ms** | **1.100 ms → 1.400 ms** |
+
+### 4. Tài nguyên hệ thống tại `stress_500` (`88c1262`) & Kết luận kiến trúc
+
+Theo [stress_500_resources.csv](results/20261126T181318Z/stress_500_resources.csv):
+- **CPU toàn máy:** trung bình **87.9%**, đỉnh **95.2%** (trên 4 vCPU).
+- **Java API:** trung bình **290.3%**, đỉnh **314.4%**; **Locust:** trung bình **38.7%**; **MySQL:** chỉ trung bình **15.4%** (đỉnh **20.5%**), **0 deadlock / 0 lock wait**.
+
+**Kết luận:**
+1. **Bảo vệ thành công 90% luồng mua sắm mà không đánh đổi bảo mật:** Giữ nguyên **BCrypt `strength = 10`**, độ trễ `p95` của các API xem sản phẩm và đặt/xem đơn ở mức 500 users giảm **88–95%** (xuống còn **27–77 ms**), `p50` toàn hệ thống giảm **30 lần** (180 ms → **6 ms**), **0% lỗi** trên toàn bộ **84.160 requests**.
+2. **Xác nhận HikariCP mặc định (10 kết nối) không phải nút thắt:** `POST /api/orders` đạt `p95 = 77 ms`, `GET /api/orders/me` đạt `p95 = 64 ms`, CPU MySQL chỉ 15.4% — nút thắt duy nhất còn lại là CPU của BCrypt (~22 login/s ở 10% tải giả lập).
+3. **Đạt trần vật lý trên cấu hình 4 vCPU:** Với think time `between(1, 3)` giây, 500 user có trần lý thuyết ~237 RPS; hệ thống đã đạt **226.26 RPS** (~95% peak CPU). Để mở rộng vượt ngưỡng này trong production, hướng tiếp theo là **Scale-out nhiều instance** kết hợp **Redis** (đồng bộ cache sản phẩm giữa các node) hoặc dùng **Refresh Token** để giảm tần suất chạy BCrypt.
