@@ -20,6 +20,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import vn.edu.sales.domain.exception.BusinessConflictException;
 import vn.edu.sales.domain.exception.InvalidCredentialsException;
 import vn.edu.sales.domain.exception.ResourceNotFoundException;
+import vn.edu.sales.domain.exception.ServiceBusyException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -61,6 +62,14 @@ public class ApiExceptionHandler {
     @ExceptionHandler(InvalidCredentialsException.class)
     ResponseEntity<ApiError> handleUnauthorized(InvalidCredentialsException exception, HttpServletRequest request) {
         return error(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", exception.getMessage(), request.getRequestURI(), null);
+    }
+
+    @ExceptionHandler(ServiceBusyException.class)
+    ResponseEntity<ApiError> handleServiceBusy(ServiceBusyException exception, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header("Retry-After", "1")
+                .body(ApiError.of(HttpStatus.SERVICE_UNAVAILABLE.value(), "SERVICE_BUSY",
+                        exception.getMessage(), request.getRequestURI()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
